@@ -1,4 +1,4 @@
-package com.keycloak
+package com.keycloak.model
 data class UserInfo(
     val name: String,
     val email: String,

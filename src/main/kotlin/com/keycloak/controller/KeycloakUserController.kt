@@ -1,21 +1,34 @@
-package com.keycloak
+package com.keycloak.controller
 
+import com.keycloak.model.UserDTO
+import com.keycloak.model.UserInfo
+import com.keycloak.model.UserInfoWithTokens
+import com.keycloak.service.KeycloakAdminService
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
+import org.keycloak.representations.idm.UserRepresentation
+import org.springframework.http.*
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken
 import org.springframework.security.oauth2.core.oidc.user.OidcUser
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.*
+import org.springframework.web.client.RestTemplate
 
 @RestController
 @RequestMapping("/api")
-class ApiController(private val clientService: OAuth2AuthorizedClientService) {
+class KeycloakUserController(
+    private val clientService: OAuth2AuthorizedClientService,
+    private val restTemplate: RestTemplate,
+    private val keycloakAdminService: KeycloakAdminService
+) {
+
+    private val keycloakBaseUrl = "http://localhost:8080/realms/springboot-realm/protocol/openid-connect"
+    private val adminBaseUrl = "http://localhost:8080/admin/realms/springboot-realm"
+    private val clientId = "springboot-client"
+    private val clientSecret = "gDmrPrVmRQy4lpPJdBXVwoOYEdFEMNcs"
+    private val tokenEndpoint = "$keycloakBaseUrl/token"
 
     @GetMapping("/public")
     fun getPublicRoute(): String {
@@ -101,5 +114,60 @@ class ApiController(private val clientService: OAuth2AuthorizedClientService) {
         }
     }
 
+    // Fetch all users
+    @GetMapping("/users")
+    fun getAllUsers(): ResponseEntity<List<UserRepresentation>> {
+        return keycloakAdminService.getAllUsers()
+    }
 
+    // get by id
+    @GetMapping("/users/{id}")
+    fun getUser(@PathVariable id: String): ResponseEntity<UserRepresentation> {
+        return keycloakAdminService.getUser(id)
+    }
+
+
+    // Create a user
+    @PostMapping("/users")
+    fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<String> {
+        return keycloakAdminService.createUser(userDTO)
+    }
+
+    // Update a user
+    @PutMapping("/users/{id}")
+    fun updateUser(@PathVariable id: String, @RequestBody userDTO: UserDTO): ResponseEntity<String> {
+        return keycloakAdminService.updateUser(id, userDTO)
+    }
+
+    // Delete a user
+    @DeleteMapping("/users/{id}")
+    fun deleteUser(@PathVariable id: String): ResponseEntity<String> {
+        return keycloakAdminService.deleteUser(id)
+    }
+
+    // Helper method to fetch admin access token
+    private fun getAdminAccessToken(): String {
+        val request = mapOf(
+            "grant_type" to "client_credentials",
+            "client_id" to clientId,
+            "client_secret" to clientSecret
+        )
+        val response = restTemplate.postForEntity(
+            tokenEndpoint,
+            HttpEntity(request, HttpHeaders().apply {
+                contentType = MediaType.APPLICATION_FORM_URLENCODED
+            }),
+            Map::class.java
+        )
+        return (response.body?.get("access_token") as? String)
+            ?: throw RuntimeException("Failed to fetch access token")
+    }
+
+    // Helper method to create HTTP headers with the access token
+    private fun createHeaders(token: String): HttpHeaders {
+        return HttpHeaders().apply {
+            set("Authorization", "Bearer $token")
+            contentType = MediaType.APPLICATION_JSON
+        }
+    }
 }

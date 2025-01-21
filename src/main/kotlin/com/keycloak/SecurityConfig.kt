@@ -17,7 +17,7 @@ class SecurityConfig {
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/api/private/**").authenticated() // Require authentication for /api/private/**
+                    .requestMatchers("/api/login/**", "/api/logout").authenticated() // Require authentication for /api/private/**
                     .anyRequest().permitAll() // Allow all other requests
             }
             .oauth2Login(withDefaults()) // Enable OAuth2 login

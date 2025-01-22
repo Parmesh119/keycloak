@@ -161,7 +161,7 @@ class KeycloakUserController(
     private fun getAdminAccessToken(): String {
         // Prepare form data
         val map: MultiValueMap<String, String> = LinkedMultiValueMap()
-        map.add("grant_type", "client_credentials")
+        map.add("grant_type", "password")
         map.add("client_id", clientId)
         map.add("client_secret", clientSecret)
 

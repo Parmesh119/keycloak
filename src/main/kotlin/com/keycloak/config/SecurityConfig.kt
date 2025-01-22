@@ -13,6 +13,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter
+import org.springframework.security.config.Customizer.withDefaults
 
 @Configuration
 @EnableWebSecurity
@@ -27,7 +29,7 @@ class SecurityConfig {
             }
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/api/public/**").permitAll()
+                    .requestMatchers("/api/public/**", "/api/get-access").permitAll()
                     .requestMatchers("/api/users/**").hasRole("admin")
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().permitAll()
@@ -37,6 +39,9 @@ class SecurityConfig {
                     jwt.jwtAuthenticationConverter(KeycloakJwtAuthenticationConverter()) // Use custom converter
                 }
             }
+            .addFilterAfter(CustomSecurityFilter(), BasicAuthenticationFilter::class.java)
+            .oauth2Login(withDefaults())
+            .oauth2Client(withDefaults())
             .build()
     }
 

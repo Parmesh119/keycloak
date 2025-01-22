@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*
 import org.springframework.web.client.RestTemplate
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
+import java.net.URI
 
 
 @RestController
@@ -113,21 +114,24 @@ class KeycloakUserController(
         return if (authentication != null && authentication.isAuthenticated) {
             ResponseEntity.ok("Token is valid")
         } else {
-            ResponseEntity.status(401).build()
+            ResponseEntity.status(401).body("Invalid token or authentication failed")
         }
     }
 
+
     // Fetch all users
     @GetMapping("/users")
-    fun getAllUsers(): ResponseEntity<List<UserRepresentation>> {
+    fun getAllUsers(response: HttpServletResponse): ResponseEntity<List<UserRepresentation>> {
+        val get_token = getAccessTokenFromOpenID()
         val token = getAdminAccessToken() // Get the admin access token
-        val headers = createHeaders(token) // Create headers with the token
+        val headers = createHeaders(get_token.toString()) // Create headers with the token
         return keycloakAdminService.getAllUsers(headers)
     }
 
     // Get user by ID
     @GetMapping("/users/{id}")
     fun getUser(@PathVariable id: String): ResponseEntity<UserRepresentation> {
+        val get_token = getAccessTokenFromOpenID()
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
         return keycloakAdminService.getUser(id, headers)
@@ -136,14 +140,21 @@ class KeycloakUserController(
     // Create a user
     @PostMapping("/users/create")
     fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<String> {
+        val response: HttpServletResponse = null as HttpServletResponse
+        val get_token = getAccessTokenFromOpenID()
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
-        return keycloakAdminService.createUser(userDTO, headers)
+        val res = ResponseEntity.status(HttpStatus.FOUND).body(response.setHeader("Location", "http://localhost:8081/api/verify-token"))
+        if(res.statusCode == HttpStatus.OK) {
+            return keycloakAdminService.createUser(userDTO, headers)
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
     }
 
     // Update a user
     @PutMapping("/users/update/{id}")
     fun updateUser(@PathVariable id: String, @RequestBody UserUpdateDTO: UserUpdateDTO): ResponseEntity<String> {
+        val get_token = getAccessTokenFromOpenID()
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
         return keycloakAdminService.updateUser(id, UserUpdateDTO, headers)
@@ -152,16 +163,74 @@ class KeycloakUserController(
     // Delete a user
     @DeleteMapping("/users/delete/{id}")
     fun deleteUser(@PathVariable id: String): ResponseEntity<String> {
+        val get_token = getAccessTokenFromOpenID()
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
         return keycloakAdminService.deleteUser(id, headers)
     }
 
+    @GetMapping("/get-access")
+    fun getAccessTokenFromOpenID(): ResponseEntity<String> {
+        // Prepare form data
+        val map: MultiValueMap<String, String> = LinkedMultiValueMap()
+        map.add("grant_type", "client_credentials")
+        map.add("client_id", "config")  // Replace with actual client_id
+        map.add("scope", "openid")
+        map.add("username", "parmesh")  // Replace with actual username
+        map.add("password", "admin")   // Replace with actual password
+        map.add("client_secret", "v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo")  // Replace with actual client_secret
+
+        // Set headers
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_FORM_URLENCODED
+
+        // Wrap data in HttpEntity
+        val entity: HttpEntity<MultiValueMap<String, String>> = HttpEntity(map, headers)
+
+        // Initialize RestTemplate
+        val restTemplate = RestTemplate()
+
+        // Send POST request to token endpoint
+        val response = restTemplate.exchange(
+            "http://localhost:8080/realms/master/protocol/openid-connect/token", // The token endpoint URL
+            HttpMethod.POST,  // HTTP Method
+            entity,  // Request entity with data and headers
+            Map::class.java  // Response type
+        )
+
+        // Extract access_token from the response body
+        val accessToken = (response.body?.get("access_token") as? String)
+            ?: throw RuntimeException("Failed to fetch access token")
+
+        // Verify the token by calling /api/verify-token
+        val verifyHeaders = HttpHeaders()
+        verifyHeaders.setBearerAuth(accessToken) // Add the token as a Bearer token
+        val verifyEntity = HttpEntity<String>(verifyHeaders)
+
+        val verifyResponse = restTemplate.exchange(
+            "http://localhost:8081/api/verify-token", // The verification endpoint
+            HttpMethod.GET, // HTTP method
+            verifyEntity, // Request entity with headers
+            String::class.java // Expected response type
+        )
+
+        // If the token is valid, return it; otherwise, return an error
+        return if (verifyResponse.body == "Token is valid") {
+            ResponseEntity.ok(accessToken)
+        } else {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token verification failed")
+        }
+    }
+
+
+
+
+
     // Helper method to fetch admin access token
     private fun getAdminAccessToken(): String {
         // Prepare form data
         val map: MultiValueMap<String, String> = LinkedMultiValueMap()
-        map.add("grant_type", "password")
+        map.add("grant_type", "client_credentials")
         map.add("client_id", clientId)
         map.add("client_secret", clientSecret)
 

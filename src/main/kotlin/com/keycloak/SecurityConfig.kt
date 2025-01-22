@@ -6,6 +6,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.config.Customizer.withDefaults
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter
 
 @Configuration
 @EnableWebSecurity
@@ -17,11 +18,12 @@ class SecurityConfig {
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/api/login/**", "/api/logout").authenticated() // Require authentication for /api/private/**
+                    .requestMatchers("/api/login/**", "/api/logout").authenticated()
                     .anyRequest().permitAll() // Allow all other requests
             }
-            .oauth2Login(withDefaults()) // Enable OAuth2 login
-            .oauth2Client(withDefaults()) // Enable OAuth2 client
+            .addFilterAfter(CustomSecurityFilter(), BasicAuthenticationFilter::class.java)
+            .oauth2Login(withDefaults())
+            .oauth2Client(withDefaults())
             .build()
     }
 }

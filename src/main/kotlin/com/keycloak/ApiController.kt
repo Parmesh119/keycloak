@@ -82,7 +82,7 @@ class ApiController(private val clientService: OAuth2AuthorizedClientService) {
             request.session.invalidate()
 
             // Redirect to Keycloak logout with redirect_uri parameter to go back to login
-            val keycloakLogoutUrl = "http://localhost:8080/realms/springboot-realm/protocol/openid-connect/logout"
+            val keycloakLogoutUrl = "http://localhost:8080/realms/master/protocol/openid-connect/logout"
 
             response.setHeader("Location", keycloakLogoutUrl)
             return ResponseEntity.status(HttpStatus.FOUND).build()
@@ -93,12 +93,7 @@ class ApiController(private val clientService: OAuth2AuthorizedClientService) {
 
     @GetMapping("/verify-token")
     fun verifyToken(): ResponseEntity<String> {
-        val authentication = SecurityContextHolder.getContext().authentication
-        return if (authentication != null && authentication.isAuthenticated) {
-            ResponseEntity.ok("Token is valid")
-        } else {
-            ResponseEntity.status(401).build()
-        }
+        return ResponseEntity.ok("Token is valid")
     }
 
 

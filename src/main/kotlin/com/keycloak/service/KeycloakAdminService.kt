@@ -1,6 +1,7 @@
 package com.keycloak.service
 
 import com.keycloak.model.UserDTO
+import com.keycloak.model.UserUpdateDTO
 import org.keycloak.representations.idm.CredentialRepresentation
 import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.beans.factory.annotation.Autowired
@@ -71,16 +72,16 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
     }
 
     // Update a user
-    fun updateUser(id: String, userDTO: UserDTO, headers: HttpHeaders): ResponseEntity<String> {
+    fun updateUser(id: String, userUpdateDTO: UserUpdateDTO, headers: HttpHeaders): ResponseEntity<String> {
         val user = UserRepresentation().apply {
-            username = userDTO.username
-            email = userDTO.email
-            firstName = userDTO.firstName
-            lastName = userDTO.lastName
-            isEnabled = userDTO.enabled
+            username = userUpdateDTO.username
+            email = userUpdateDTO.email
+            firstName = userUpdateDTO.firstName
+            lastName = userUpdateDTO.lastName
+            isEnabled = userUpdateDTO.enabled
 
-            if (userDTO.credentials != null) {
-                credentials = userDTO.credentials.map { cred ->
+            if (userUpdateDTO.credentials != null) {
+                credentials = userUpdateDTO.credentials.map { cred ->
                     CredentialRepresentation().apply {
                         type = cred.type
                         value = cred.value

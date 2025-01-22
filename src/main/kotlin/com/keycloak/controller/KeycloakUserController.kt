@@ -3,6 +3,7 @@ package com.keycloak.controller
 import com.keycloak.model.UserDTO
 import com.keycloak.model.UserInfo
 import com.keycloak.model.UserInfoWithTokens
+import com.keycloak.model.UserUpdateDTO
 import com.keycloak.service.KeycloakAdminService
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -133,7 +134,7 @@ class KeycloakUserController(
     }
 
     // Create a user
-    @PostMapping("/users")
+    @PostMapping("/users/create")
     fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<String> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
@@ -141,15 +142,15 @@ class KeycloakUserController(
     }
 
     // Update a user
-    @PutMapping("/users/{id}")
-    fun updateUser(@PathVariable id: String, @RequestBody userDTO: UserDTO): ResponseEntity<String> {
+    @PutMapping("/users/update/{id}")
+    fun updateUser(@PathVariable id: String, @RequestBody UserUpdateDTO: UserUpdateDTO): ResponseEntity<String> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
-        return keycloakAdminService.updateUser(id, userDTO, headers)
+        return keycloakAdminService.updateUser(id, UserUpdateDTO, headers)
     }
 
     // Delete a user
-    @DeleteMapping("/users/{id}")
+    @DeleteMapping("/users/delete/{id}")
     fun deleteUser(@PathVariable id: String): ResponseEntity<String> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token

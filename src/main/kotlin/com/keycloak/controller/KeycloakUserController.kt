@@ -15,6 +15,9 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.core.oidc.user.OidcUser
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.client.RestTemplate
+import org.springframework.util.LinkedMultiValueMap
+import org.springframework.util.MultiValueMap
+
 
 @RestController
 @RequestMapping("/api")
@@ -24,10 +27,10 @@ class KeycloakUserController(
     private val keycloakAdminService: KeycloakAdminService
 ) {
 
-    private val keycloakBaseUrl = "http://localhost:8080/realms/springboot-realm/protocol/openid-connect"
-    private val adminBaseUrl = "http://localhost:8080/admin/realms/springboot-realm"
-    private val clientId = "springboot-client"
-    private val clientSecret = "gDmrPrVmRQy4lpPJdBXVwoOYEdFEMNcs"
+    private val keycloakBaseUrl = "http://localhost:8080/realms/master/protocol/openid-connect"
+    private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
+    private val clientId = "admin-cli"
+    private val clientSecret = "rUogbpqrIRteo6HnMH0gEY7usc4q3PC0"
     private val tokenEndpoint = "$keycloakBaseUrl/token"
 
     @GetMapping("/public")
@@ -76,8 +79,7 @@ class KeycloakUserController(
             println("Access Token " + accessToken)
             println("Refresh Token " + refreshToken)
             println("ID Token " + idToken)
-           if(userInfoWithTokens.idToken != null && userInfoWithTokens.accessToken != null) {
-
+            if (userInfoWithTokens.idToken != null && userInfoWithTokens.accessToken != null) {
                 ResponseEntity.status(HttpStatus.FOUND).body(response.setHeader("Location", "http://localhost:8081/api/verify-token"))
             } else {
                 ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
@@ -95,7 +97,7 @@ class KeycloakUserController(
             request.session.invalidate()
 
             // Redirect to Keycloak logout with redirect_uri parameter to go back to login
-            val keycloakLogoutUrl = "http://localhost:8080/realms/springboot-realm/protocol/openid-connect/logout"
+            val keycloakLogoutUrl = "http://localhost:8080/realms/master/protocol/openid-connect/logout"
 
             response.setHeader("Location", keycloakLogoutUrl)
             return ResponseEntity.status(HttpStatus.FOUND).build()
@@ -117,46 +119,62 @@ class KeycloakUserController(
     // Fetch all users
     @GetMapping("/users")
     fun getAllUsers(): ResponseEntity<List<UserRepresentation>> {
-        return keycloakAdminService.getAllUsers()
+        val token = getAdminAccessToken() // Get the admin access token
+        val headers = createHeaders(token) // Create headers with the token
+        return keycloakAdminService.getAllUsers(headers)
     }
 
-    // get by id
+    // Get user by ID
     @GetMapping("/users/{id}")
     fun getUser(@PathVariable id: String): ResponseEntity<UserRepresentation> {
-        return keycloakAdminService.getUser(id)
+        val token = getAdminAccessToken() // Get the admin access token
+        val headers = createHeaders(token) // Create headers with the token
+        return keycloakAdminService.getUser(id, headers)
     }
-
 
     // Create a user
     @PostMapping("/users")
     fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<String> {
-        return keycloakAdminService.createUser(userDTO)
+        val token = getAdminAccessToken() // Get the admin access token
+        val headers = createHeaders(token) // Create headers with the token
+        return keycloakAdminService.createUser(userDTO, headers)
     }
 
     // Update a user
     @PutMapping("/users/{id}")
     fun updateUser(@PathVariable id: String, @RequestBody userDTO: UserDTO): ResponseEntity<String> {
-        return keycloakAdminService.updateUser(id, userDTO)
+        val token = getAdminAccessToken() // Get the admin access token
+        val headers = createHeaders(token) // Create headers with the token
+        return keycloakAdminService.updateUser(id, userDTO, headers)
     }
 
     // Delete a user
     @DeleteMapping("/users/{id}")
     fun deleteUser(@PathVariable id: String): ResponseEntity<String> {
-        return keycloakAdminService.deleteUser(id)
+        val token = getAdminAccessToken() // Get the admin access token
+        val headers = createHeaders(token) // Create headers with the token
+        return keycloakAdminService.deleteUser(id, headers)
     }
 
     // Helper method to fetch admin access token
     private fun getAdminAccessToken(): String {
-        val request = mapOf(
-            "grant_type" to "client_credentials",
-            "client_id" to clientId,
-            "client_secret" to clientSecret
-        )
-        val response = restTemplate.postForEntity(
-            tokenEndpoint,
-            HttpEntity(request, HttpHeaders().apply {
-                contentType = MediaType.APPLICATION_FORM_URLENCODED
-            }),
+        // Prepare form data
+        val map: MultiValueMap<String, String> = LinkedMultiValueMap()
+        map.add("grant_type", "client_credentials")
+        map.add("client_id", clientId)
+        map.add("client_secret", clientSecret)
+
+        // Set headers
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_FORM_URLENCODED
+        // Wrap data in HttpEntity
+        val entity: HttpEntity<MultiValueMap<String, String>> = HttpEntity(map, headers)
+
+        // Send POST request
+        val response = restTemplate.exchange(
+            tokenEndpoint,  // Replace with the actual URL
+            HttpMethod.POST,  // HTTP Method
+            entity,  // Request entity with data and headers
             Map::class.java
         )
         return (response.body?.get("access_token") as? String)

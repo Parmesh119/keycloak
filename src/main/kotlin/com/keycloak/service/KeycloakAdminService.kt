@@ -1,91 +1,139 @@
 package com.keycloak.service
 
 import com.keycloak.model.UserDTO
-import org.keycloak.admin.client.Keycloak
 import org.keycloak.representations.idm.CredentialRepresentation
 import org.keycloak.representations.idm.UserRepresentation
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.*
 import org.springframework.stereotype.Service
-import org.springframework.http.ResponseEntity
-import org.springframework.http.HttpStatus
+import org.springframework.util.LinkedMultiValueMap
+import org.springframework.util.MultiValueMap
+import org.springframework.web.client.RestTemplate
 
 @Service
-class KeycloakAdminService(private val keycloak: Keycloak) {
+class KeycloakAdminService(private val restTemplate: RestTemplate) {
 
-    private val realm = "springboot-realm"
+    private val realm = "master"
+    private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
 
-    fun createUser(userDTO: UserDTO): ResponseEntity<String> {
-        try {
-            val user = UserRepresentation().apply {
-                username = userDTO.username
-                email = userDTO.email
-                firstName = userDTO.firstName
-                lastName = userDTO.lastName
-                isEnabled = userDTO.enabled
+    // Create a user
+    fun createUser(userDTO: UserDTO, headers: HttpHeaders): ResponseEntity<String> {
+        val user = UserRepresentation().apply {
+            username = userDTO.username
+            email = userDTO.email
+            firstName = userDTO.firstName
+            lastName = userDTO.lastName
+            isEnabled = userDTO.enabled
 
-                if (userDTO.credentials != null) {
-                    credentials = userDTO.credentials.map { cred ->
-                        CredentialRepresentation().apply {
-                            type = cred.type
-                            value = cred.value
-                            isTemporary = cred.temporary
-                        }
+            if (userDTO.credentials != null) {
+                credentials = userDTO.credentials.map { cred ->
+                    CredentialRepresentation().apply {
+                        type = cred.type
+                        value = cred.value
+                        isTemporary = cred.temporary
                     }
                 }
             }
+        }
 
-            val response = keycloak.realm(realm).users().create(user)
-            return if (response.status == 201) {
-                ResponseEntity.status(HttpStatus.CREATED).body("User created successfully")
-            } else {
-                ResponseEntity.status(response.status).body("Failed to create user")
+        val request = org.springframework.http.HttpEntity(user, headers)
+        val response = restTemplate.postForEntity("$adminBaseUrl/users", request, String::class.java)
+
+        return if (response.statusCode.is2xxSuccessful) {
+            ResponseEntity.status(201).body("User created successfully")
+        } else {
+            ResponseEntity.status(response.statusCode).body("Failed to create user")
+        }
+    }
+
+    // Fetch all users
+    fun getAllUsers(headers: HttpHeaders): ResponseEntity<List<UserRepresentation>> {
+        val request = org.springframework.http.HttpEntity(null, headers)
+        val response = restTemplate.exchange("$adminBaseUrl/users", org.springframework.http.HttpMethod.GET, request, Array<UserRepresentation>::class.java)
+
+        return if (response.statusCode.is2xxSuccessful) {
+            ResponseEntity.ok(response.body?.toList())
+        } else {
+            ResponseEntity.status(response.statusCode).build()
+        }
+    }
+
+    // Get user by ID
+    fun getUser(id: String, headers: HttpHeaders): ResponseEntity<UserRepresentation> {
+        val request = org.springframework.http.HttpEntity(null, headers)
+        val response = restTemplate.exchange("$adminBaseUrl/users/$id", org.springframework.http.HttpMethod.GET, request, UserRepresentation::class.java)
+
+        return if (response.statusCode.is2xxSuccessful) {
+            ResponseEntity.ok(response.body)
+        } else {
+            ResponseEntity.status(response.statusCode).build()
+        }
+    }
+
+    // Update a user
+    fun updateUser(id: String, userDTO: UserDTO, headers: HttpHeaders): ResponseEntity<String> {
+        val user = UserRepresentation().apply {
+            username = userDTO.username
+            email = userDTO.email
+            firstName = userDTO.firstName
+            lastName = userDTO.lastName
+            isEnabled = userDTO.enabled
+
+            if (userDTO.credentials != null) {
+                credentials = userDTO.credentials.map { cred ->
+                    CredentialRepresentation().apply {
+                        type = cred.type
+                        value = cred.value
+                        isTemporary = cred.temporary
+                    }
+                }
             }
-        } catch (e: Exception) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error creating user: ${e.message}")
+        }
+
+        val request = org.springframework.http.HttpEntity(user, headers)
+        val response = restTemplate.exchange("$adminBaseUrl/users/$id", org.springframework.http.HttpMethod.PUT, request, String::class.java)
+
+        return if (response.statusCode.is2xxSuccessful) {
+            ResponseEntity.ok("User updated successfully")
+        } else {
+            ResponseEntity.status(response.statusCode).body("Failed to update user")
         }
     }
 
-    fun getAllUsers(): ResponseEntity<List<UserRepresentation>> {
-        return try {
-            val users = keycloak.realm(realm).users().list()
-            ResponseEntity.ok(users)
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-        }
-    }
+    // Delete a user
+    fun deleteUser(id: String, headers: HttpHeaders): ResponseEntity<String> {
+        val request = org.springframework.http.HttpEntity(null, headers)
+        val response = restTemplate.exchange("$adminBaseUrl/users/$id", org.springframework.http.HttpMethod.DELETE, request, String::class.java)
 
-    fun updateUser(id: String, userDTO: UserDTO): ResponseEntity<String> {
-        try {
-            val user = keycloak.realm(realm).users().get(id).toRepresentation()
-            user.email = userDTO.email
-            user.firstName = userDTO.firstName
-            user.lastName = userDTO.lastName
-            user.isEnabled = userDTO.enabled
-
-            keycloak.realm(realm).users().get(id).update(user)
-            return ResponseEntity.ok("User updated successfully")
-        } catch (e: Exception) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error updating user: ${e.message}")
-        }
-    }
-
-    fun deleteUser(id: String): ResponseEntity<String> {
-        return try {
-            keycloak.realm(realm).users().get(id).remove()
+        return if (response.statusCode.is2xxSuccessful) {
             ResponseEntity.ok("User deleted successfully")
-        } catch (e: Exception) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error deleting user: ${e.message}")
+        } else {
+            ResponseEntity.status(response.statusCode).body("Failed to delete user")
         }
     }
 
-    fun getUser(id: String): ResponseEntity<UserRepresentation> {
-        return try {
-            val user = keycloak.realm(realm).users().get(id).toRepresentation()
-            ResponseEntity.ok(user)
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-        }
+    fun sendPostRequest() {
+        // Prepare form data
+        val map: MultiValueMap<String, String> = LinkedMultiValueMap()
+        map.add("key1", "value1")
+        map.add("key2", "value2")
+
+        // Set headers
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_FORM_URLENCODED
+
+        // Wrap data in HttpEntity
+        val entity: HttpEntity<MultiValueMap<String, String>> = HttpEntity(map, headers)
+
+        // Send POST request
+        val response = restTemplate.exchange(
+            "your-endpoint-url",  // Replace with the actual URL
+            HttpMethod.POST,  // HTTP Method
+            entity,  // Request entity with data and headers
+            String::class.java // Response type
+        )
+
+        // Handle the response
+        println(response.body)
     }
 }

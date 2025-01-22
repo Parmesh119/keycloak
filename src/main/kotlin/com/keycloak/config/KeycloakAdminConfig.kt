@@ -5,6 +5,9 @@ import org.keycloak.admin.client.Keycloak
 import org.keycloak.admin.client.KeycloakBuilder
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.client.ClientHttpRequestFactory
+import org.springframework.http.client.SimpleClientHttpRequestFactory
+import org.springframework.http.converter.FormHttpMessageConverter
 import org.springframework.web.client.RestTemplate
 
 @Configuration
@@ -16,14 +19,22 @@ class KeycloakAdminConfig {
             .serverUrl("http://localhost:8080")
             .realm("master")
             .grantType(OAuth2Constants.PASSWORD)
-            .clientId("admin-cli")
-            .username("admin")
+            .clientId("config")  // Use your client ID
+            .clientSecret("v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo")  // Use your client secret
+            .username("parmesh")
             .password("admin")
             .build()
     }
 
     @Bean
     fun restTemplate(): RestTemplate {
-        return RestTemplate()
+        val restTemplate = RestTemplate()
+        // Add FormHttpMessageConverter
+        restTemplate.messageConverters.add(FormHttpMessageConverter())
+        return restTemplate
+    }
+
+    private fun simpleClientHttpRequestFactory(): ClientHttpRequestFactory {
+        return SimpleClientHttpRequestFactory()
     }
 }

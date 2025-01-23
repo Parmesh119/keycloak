@@ -4,6 +4,7 @@ import com.keycloak.model.UserDTO
 import com.keycloak.model.UserInfo
 import com.keycloak.model.UserInfoWithTokens
 import com.keycloak.model.UserUpdateDTO
+import com.keycloak.service.EmailService
 import com.keycloak.service.KeycloakAdminService
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -25,7 +26,8 @@ import org.springframework.util.MultiValueMap
 class KeycloakUserController(
     private val clientService: OAuth2AuthorizedClientService,
     private val restTemplate: RestTemplate,
-    private val keycloakAdminService: KeycloakAdminService
+    private val keycloakAdminService: KeycloakAdminService,
+    private val emailService: EmailService
 ) {
 
     private val keycloakBaseUrl = "http://localhost:8080/realms/master/protocol/openid-connect"
@@ -138,7 +140,21 @@ class KeycloakUserController(
     fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<out Any> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
-        return keycloakAdminService.createUser(userDTO, headers)
+        val res = keycloakAdminService.createUser(userDTO, headers)
+
+        val loginLink = "http://example.com/login"
+        val emailBody = """
+            Welcome to our app!
+            
+            Here are your login details:
+            Email: ${userDTO.email}
+            Password: ${userDTO.credentials?.first()?.value}
+            
+            Please log in within 12 hours: $loginLink
+        """.trimIndent()
+        userDTO.email?.let { emailService.sendEmail(it, "New Account Created", emailBody) }
+
+        return res
     }
 
     // Update a user

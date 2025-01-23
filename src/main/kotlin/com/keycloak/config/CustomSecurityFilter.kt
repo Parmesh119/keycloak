@@ -10,6 +10,7 @@ import com.auth0.jwk.JwkProvider
 import com.auth0.jwk.JwkProviderBuilder
 import jakarta.servlet.*
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -26,7 +27,7 @@ class CustomSecurityFilter : Filter {
     override fun doFilter(request: ServletRequest, response: ServletResponse, chain: FilterChain) {
         try {
             val httpRequest = request as HttpServletRequest
-            if (httpRequest.servletPath == "/api/verify-token") {
+            if (httpRequest.servletPath == "/api/verify-token" ) {
                 val token = httpRequest.getParameter("access_token")
                     ?: httpRequest.getHeader("Authorization")?.substring(7)
 
@@ -41,26 +42,42 @@ class CustomSecurityFilter : Filter {
 
                     val verifier: JWTVerifier = JWT.require(algorithm)
                         .withIssuer("http://localhost:8080/realms/master")
-                        .withAudience("master-realm")
+                        .withAudience("master-realm") // Enforce the audience claim
                         .build()
-                    verifier.verify(decodedJWT)
 
+                    // Verify the token
+                    val verifiedJWT = verifier.verify(decodedJWT)
+
+                    // Set authentication if the token is valid
                     SecurityContextHolder.getContext().authentication =
-                        UsernamePasswordAuthenticationToken(decodedJWT.subject, null,
-                            listOf(SimpleGrantedAuthority("SIMPLE_AUTHORITY")))
-                    logger.info("User ${decodedJWT.subject} authenticated")
+                        UsernamePasswordAuthenticationToken(
+                            verifiedJWT.subject, null,
+                            listOf(SimpleGrantedAuthority("SIMPLE_AUTHORITY"))
+                        )
+
+                    logger.info("User ${verifiedJWT.subject} authenticated successfully")
                 } else {
                     logger.error("No token provided")
+                    (response as HttpServletResponse).status = HttpServletResponse.SC_UNAUTHORIZED
+                    response.writer.write("Unauthorized: No token provided")
+                    return
                 }
             }
-        } catch (jwtVerificationException: JWTVerificationException) {
-            logger.error("JWT Verification Exception", jwtVerificationException)
+        } catch (e: JWTVerificationException) {
+            logger.error("JWT Verification Exception: ${e.message}")
+            (response as HttpServletResponse).status = HttpServletResponse.SC_UNAUTHORIZED
+            response.writer.write("Unauthorized: Invalid token")
+            return
         } catch (e: Exception) {
-            logger.error("Exception", e)
+            logger.error("Exception occurred: ${e.message}")
+            (response as HttpServletResponse).status = HttpServletResponse.SC_INTERNAL_SERVER_ERROR
+            response.writer.write("Internal Server Error")
+            return
         }
 
         chain.doFilter(request, response)
         SecurityContextHolder.clearContext()
     }
 }
+
 

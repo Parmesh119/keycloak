@@ -123,8 +123,17 @@ class KeycloakUserController(
     @GetMapping("/users")
     fun getAllUsers(response: HttpServletResponse): ResponseEntity<List<UserRepresentation>> {
         val get_token = getAccessTokenFromOpenID()
-        val token = getAdminAccessToken() // Get the admin access token
-        val headers = createHeaders(get_token.toString()) // Create headers with the token
+        val verifyHeaders = HttpHeaders()
+        verifyHeaders.setBearerAuth(get_token.toString()) // Add the token as a Bearer token
+        val verifyEntity = HttpEntity<String>(verifyHeaders)
+
+        val verifyResponse = restTemplate.exchange(
+            "http://localhost:8081/api/verify-token", // The verification endpoint
+            HttpMethod.GET, // HTTP method
+            verifyEntity, // Request entity with headers
+            String::class.java // Expected response type
+        )
+        val headers = createHeaders(get_token.toString())
         return keycloakAdminService.getAllUsers(headers)
     }
 
@@ -132,8 +141,8 @@ class KeycloakUserController(
     @GetMapping("/users/{id}")
     fun getUser(@PathVariable id: String): ResponseEntity<UserRepresentation> {
         val get_token = getAccessTokenFromOpenID()
-        val token = getAdminAccessToken() // Get the admin access token
-        val headers = createHeaders(token) // Create headers with the token
+        val token = getAdminAccessToken()
+        val headers = createHeaders(token)
         return keycloakAdminService.getUser(id, headers)
     }
 
@@ -213,7 +222,6 @@ class KeycloakUserController(
             verifyEntity, // Request entity with headers
             String::class.java // Expected response type
         )
-
         // If the token is valid, return it; otherwise, return an error
         return if (verifyResponse.body == "Token is valid") {
             ResponseEntity.ok(accessToken)
@@ -221,10 +229,6 @@ class KeycloakUserController(
             ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token verification failed")
         }
     }
-
-
-
-
 
     // Helper method to fetch admin access token
     private fun getAdminAccessToken(): String {

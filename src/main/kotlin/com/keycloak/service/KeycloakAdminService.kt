@@ -48,9 +48,24 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
     }
 
     // Fetch all users
+//    fun getAllUsers(headers: HttpHeaders): ResponseEntity<List<UserRepresentation>> {
+//        val request = org.springframework.http.HttpEntity(null, headers)
+//        val response = restTemplate.exchange("$adminBaseUrl/users", org.springframework.http.HttpMethod.GET, request, Array<UserRepresentation>::class.java)
+//
+//        return if (response.statusCode.is2xxSuccessful) {
+//            ResponseEntity.ok(response.body?.toList())
+//        } else {
+//            ResponseEntity.status(response.statusCode).build()
+//        }
+//    }
     fun getAllUsers(headers: HttpHeaders): ResponseEntity<List<UserRepresentation>> {
-        val request = org.springframework.http.HttpEntity(null, headers)
-        val response = restTemplate.exchange("$adminBaseUrl/users", org.springframework.http.HttpMethod.GET, request, Array<UserRepresentation>::class.java)
+        val request = HttpEntity(null, headers)
+        val response = restTemplate.exchange(
+            "$adminBaseUrl/users",
+            HttpMethod.GET,
+            request,
+            Array<UserRepresentation>::class.java
+        )
 
         return if (response.statusCode.is2xxSuccessful) {
             ResponseEntity.ok(response.body?.toList())
@@ -58,6 +73,7 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
             ResponseEntity.status(response.statusCode).build()
         }
     }
+
 
     // Get user by ID
     fun getUser(id: String, headers: HttpHeaders): ResponseEntity<UserRepresentation> {

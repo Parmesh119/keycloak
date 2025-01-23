@@ -30,15 +30,15 @@ class SecurityConfig {
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers("/api/public/**", "/api/get-access").permitAll()
-                    .requestMatchers("/api/users/**").hasRole("admin")
+                    .requestMatchers("/api/users/**").hasRole("default-roles-master")
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().permitAll()
             }
-            .oauth2ResourceServer { oauth2 ->
-                oauth2.jwt { jwt ->
-                    jwt.jwtAuthenticationConverter(KeycloakJwtAuthenticationConverter()) // Use custom converter
-                }
-            }
+//            .oauth2ResourceServer { oauth2 ->
+//                oauth2.jwt { jwt ->
+//                    jwt.jwtAuthenticationConverter(KeycloakJwtAuthenticationConverter()) // Use custom converter
+//                }
+//            }
             .addFilterAfter(CustomSecurityFilter(), BasicAuthenticationFilter::class.java)
             .oauth2Login(withDefaults())
             .oauth2Client(withDefaults())
@@ -48,5 +48,15 @@ class SecurityConfig {
     @Bean
     fun jwtDecoder(@Value("\${spring.security.oauth2.client.provider.keycloak.issuer-uri}") issuerUri: String): JwtDecoder {
         return NimbusJwtDecoder.withIssuerLocation(issuerUri).build()
+    }
+
+    @Bean
+    fun jwtAuthenticationConverter(): JwtAuthenticationConverter {
+        val converter = JwtGrantedAuthoritiesConverter()
+        converter.setAuthorityPrefix("ROLE_")
+        converter.setAuthoritiesClaimName("roles") // Customize to match Keycloak claims
+        return JwtAuthenticationConverter().apply {
+            setJwtGrantedAuthoritiesConverter(converter)
+        }
     }
 }

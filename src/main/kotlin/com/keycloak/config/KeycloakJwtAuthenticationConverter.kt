@@ -16,9 +16,6 @@ class KeycloakJwtAuthenticationConverter : JwtAuthenticationConverter() {
     private fun extractAuthorities(jwt: Jwt): Collection<SimpleGrantedAuthority> {
         val realmRoles = jwt.getClaim<Map<String, Any>>("realm_access")?.get("roles") as? List<String> ?: emptyList()
 
-        // Log roles for debugging
-        println("Roles extracted: $realmRoles")
-
         return realmRoles.map { role -> SimpleGrantedAuthority("ROLE_$role") }
     }
 }

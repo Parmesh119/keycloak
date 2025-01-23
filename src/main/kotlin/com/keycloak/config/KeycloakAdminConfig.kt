@@ -18,9 +18,9 @@ class KeycloakAdminConfig {
         return KeycloakBuilder.builder()
             .serverUrl("http://localhost:8080")
             .realm("master")
-            .grantType(OAuth2Constants.PASSWORD)
+            .grantType(OAuth2Constants.CLIENT_CREDENTIALS)
             .clientId("config")  // Use your client ID
-            .clientSecret("v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo")  // Use your client secret
+            .clientSecret("Qg0Z29EOtioDLSVVaiQSCW2OYE26Ms9S")  // Use your client secret
             .username("parmesh")
             .password("admin")
             .build()

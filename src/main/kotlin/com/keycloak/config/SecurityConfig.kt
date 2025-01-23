@@ -1,5 +1,4 @@
 package com.keycloak.config
-
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.oauth2.jwt.Jwt
@@ -13,11 +12,9 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
-
 @Configuration
 @EnableWebSecurity
 class SecurityConfig {
-
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         return http
@@ -37,8 +34,8 @@ class SecurityConfig {
                     jwt.jwtAuthenticationConverter(KeycloakJwtAuthenticationConverter()) // Use custom converter
                 }
             }
-            .build()
-    }
+                .build()
+            }
 
     @Bean
     fun jwtDecoder(@Value("\${spring.security.oauth2.client.provider.keycloak.issuer-uri}") issuerUri: String): JwtDecoder {

@@ -33,7 +33,7 @@ class KeycloakUserController(
     private val keycloakBaseUrl = "http://localhost:8080/realms/master/protocol/openid-connect"
     private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
     private val clientId = "config"
-    private val clientSecret = "BBaLqKOGP0kXzFDH1AcTtTav5GLPcKre"
+    private val clientSecret = "Qg0Z29EOtioDLSVVaiQSCW2OYE26Ms9S"
     private val tokenEndpoint = "$keycloakBaseUrl/token"
 
     @GetMapping("/public")
@@ -213,9 +213,9 @@ class KeycloakUserController(
         map.add("grant_type", "client_credentials")
         map.add("client_id", "config")  // Replace with actual client_id
         map.add("scope", "openid")
-        map.add("username", "parmesh")  // Replace with actual username
-        map.add("password", "admin")   // Replace with actual password
-        map.add("client_secret", "BBaLqKOGP0kXzFDH1AcTtTav5GLPcKre")  // Replace with actual client_secret
+        map.add("username", "user")  // Replace with actual username
+        map.add("password", "1234")   // Replace with actual password
+        map.add("client_secret", "Qg0Z29EOtioDLSVVaiQSCW2OYE26Ms9S")  // Replace with actual client_secret
 
         // Set headers
         val headers = HttpHeaders()

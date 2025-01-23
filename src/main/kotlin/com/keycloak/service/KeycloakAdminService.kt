@@ -1,9 +1,12 @@
 package com.keycloak.service
 
+import com.keycloak.config.KeycloakAdminConfig
 import com.keycloak.model.UserDTO
 import com.keycloak.model.UserUpdateDTO
 import org.keycloak.representations.idm.CredentialRepresentation
 import org.keycloak.representations.idm.UserRepresentation
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.*
 import org.springframework.stereotype.Service
 import org.springframework.util.LinkedMultiValueMap
@@ -47,6 +50,18 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
 
     // Fetch all users
     fun getAllUsers(headers: HttpHeaders): ResponseEntity<List<UserRepresentation>> {
+        val authorizationHeader = headers.getFirst("Authorization")
+        if (!authorizationHeader.isNullOrEmpty() && authorizationHeader.startsWith("Bearer ")) {
+            // Remove the Bearer prefix and get the token
+            val token = authorizationHeader.substring(7)  // Remove "Bearer " (7 characters)
+
+            // You can log or inspect the token if needed
+            println("Extracted Token: $token")
+
+            // Remove the Authorization header
+            headers.remove("Authorization")
+        }
+
         val request = org.springframework.http.HttpEntity(null, headers)
         val response = restTemplate.exchange("$adminBaseUrl/users", org.springframework.http.HttpMethod.GET, request, Array<UserRepresentation>::class.java)
 

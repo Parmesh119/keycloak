@@ -18,7 +18,7 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
     private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
 
     // Create a user
-    fun createUser(userDTO: UserDTO, headers: HttpHeaders): ResponseEntity<String> {
+    fun createUser(userDTO: UserDTO, headers: HttpHeaders): ResponseEntity<out Any> {
         val user = UserRepresentation().apply {
             username = userDTO.username
             email = userDTO.email
@@ -39,9 +39,8 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
 
         val request = org.springframework.http.HttpEntity(user, headers)
         val response = restTemplate.postForEntity("$adminBaseUrl/users", request, String::class.java)
-
         return if (response.statusCode.is2xxSuccessful) {
-            ResponseEntity.status(201).body("User created successfully")
+            ResponseEntity.status(201).body(getUser(response.headers.location!!.path.split("/").last(), headers))
         } else {
             ResponseEntity.status(response.statusCode).body("Failed to create user")
         }

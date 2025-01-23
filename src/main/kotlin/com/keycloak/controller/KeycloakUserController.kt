@@ -118,7 +118,7 @@ class KeycloakUserController(
     }
 
     // Fetch all users
-    @GetMapping("/users")
+    @GetMapping("/users/list")
     fun getAllUsers(): ResponseEntity<List<UserRepresentation>> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
@@ -135,7 +135,7 @@ class KeycloakUserController(
 
     // Create a user
     @PostMapping("/users/create")
-    fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<String> {
+    fun createUser(@RequestBody userDTO: UserDTO): ResponseEntity<out Any> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
         return keycloakAdminService.createUser(userDTO, headers)
@@ -161,7 +161,7 @@ class KeycloakUserController(
     private fun getAdminAccessToken(): String {
         // Prepare form data
         val map: MultiValueMap<String, String> = LinkedMultiValueMap()
-        map.add("grant_type", "password")
+        map.add("grant_type", "client_credentials")
         map.add("client_id", clientId)
         map.add("client_secret", clientSecret)
 
@@ -188,5 +188,44 @@ class KeycloakUserController(
             set("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
         }
+    }
+
+    @GetMapping("/get-access")
+    fun getAccessTokenFromOpenID(): ResponseEntity<String> {
+        // Prepare form data
+        val map: MultiValueMap<String, String> = LinkedMultiValueMap()
+        map.add("grant_type", "client_credentials")
+        map.add("client_id", "config")  // Replace with actual client_id
+        map.add("scope", "openid")
+        map.add("username", "parmesh")  // Replace with actual username
+        map.add("password", "admin")   // Replace with actual password
+        map.add("client_secret", "v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo")  // Replace with actual client_secret
+
+        // Set headers
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_FORM_URLENCODED
+
+        // Wrap data in HttpEntity
+        val entity: HttpEntity<MultiValueMap<String, String>> = HttpEntity(map, headers)
+
+        // Initialize RestTemplate
+        val restTemplate = RestTemplate()
+
+        // Send POST request to token endpoint
+        val response = restTemplate.exchange(
+            "http://localhost:8080/realms/master/protocol/openid-connect/token", // The token endpoint URL
+            HttpMethod.POST,  // HTTP Method
+            entity,  // Request entity with data and headers
+            Map::class.java  // Response type
+        )
+
+        // Extract access_token from the response body
+        val accessToken = (response.body?.get("access_token") as? String)
+            ?: throw RuntimeException("Failed to fetch access token")
+
+        println(accessToken)
+
+        // Verify the token by calling /api/verify-token
+        return ResponseEntity.ok(accessToken)
     }
 }

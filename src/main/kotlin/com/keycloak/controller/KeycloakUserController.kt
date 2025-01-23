@@ -33,7 +33,7 @@ class KeycloakUserController(
     private val keycloakBaseUrl = "http://localhost:8080/realms/master/protocol/openid-connect"
     private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
     private val clientId = "config"
-    private val clientSecret = "v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo"
+    private val clientSecret = "BBaLqKOGP0kXzFDH1AcTtTav5GLPcKre"
     private val tokenEndpoint = "$keycloakBaseUrl/token"
 
     @GetMapping("/public")
@@ -215,7 +215,7 @@ class KeycloakUserController(
         map.add("scope", "openid")
         map.add("username", "parmesh")  // Replace with actual username
         map.add("password", "admin")   // Replace with actual password
-        map.add("client_secret", "v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo")  // Replace with actual client_secret
+        map.add("client_secret", "BBaLqKOGP0kXzFDH1AcTtTav5GLPcKre")  // Replace with actual client_secret
 
         // Set headers
         val headers = HttpHeaders()
@@ -238,8 +238,6 @@ class KeycloakUserController(
         // Extract access_token from the response body
         val accessToken = (response.body?.get("access_token") as? String)
             ?: throw RuntimeException("Failed to fetch access token")
-
-        println(accessToken)
 
         // Verify the token by calling /api/verify-token
         return ResponseEntity.ok(accessToken)

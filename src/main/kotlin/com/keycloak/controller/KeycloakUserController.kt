@@ -32,8 +32,8 @@ class KeycloakUserController(
 
     private val keycloakBaseUrl = "http://localhost:8080/realms/master/protocol/openid-connect"
     private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
-    private val clientId = "admin-cli"
-    private val clientSecret = "rUogbpqrIRteo6HnMH0gEY7usc4q3PC0"
+    private val clientId = "config"
+    private val clientSecret = "v2YkbWRTXORVUGpWNkaJ5MZITwVQvlEo"
     private val tokenEndpoint = "$keycloakBaseUrl/token"
 
     @GetMapping("/public")

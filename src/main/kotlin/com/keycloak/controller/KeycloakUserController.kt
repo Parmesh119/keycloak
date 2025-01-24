@@ -6,10 +6,14 @@ import com.keycloak.model.UserInfoWithTokens
 import com.keycloak.model.UserUpdateDTO
 import com.keycloak.service.EmailService
 import com.keycloak.service.KeycloakAdminService
+import jakarta.servlet.RequestDispatcher
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.keycloak.representations.idm.ClientRepresentation
 import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.http.*
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService
@@ -33,7 +37,7 @@ class KeycloakUserController(
     private val keycloakBaseUrl = "http://localhost:8080/realms/master/protocol/openid-connect"
     private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
     private val clientId = "config"
-    private val clientSecret = "Qg0Z29EOtioDLSVVaiQSCW2OYE26Ms9S"
+    private val clientSecret = "sDoL4iAzeYquc7mtoubGr5t1F8yDRif4"
     private val tokenEndpoint = "$keycloakBaseUrl/token"
 
     @GetMapping("/public")
@@ -42,7 +46,7 @@ class KeycloakUserController(
     }
 
     @GetMapping("/login")
-    fun getPrivateRoute(response: HttpServletResponse): Any {
+    fun getPrivateRoute(response: HttpServletResponse): ResponseEntity<Any> {
         var accessToken: String? = null
         var refreshToken: String? = null
         val authentication = SecurityContextHolder.getContext().authentication
@@ -82,11 +86,7 @@ class KeycloakUserController(
             println("Access Token " + accessToken)
             println("Refresh Token " + refreshToken)
             println("ID Token " + idToken)
-            if (userInfoWithTokens.idToken != null && userInfoWithTokens.accessToken != null) {
-                ResponseEntity.status(HttpStatus.FOUND).body(response.setHeader("Location", "http://localhost:8081/api/verify-token"))
-            } else {
-                ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-            }
+            return ResponseEntity.ok(userInfoWithTokens)
         } else {
             ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
         }
@@ -119,11 +119,24 @@ class KeycloakUserController(
         }
     }
 
+    @GetMapping("/error")
+    fun handleError(request: HttpServletRequest): ResponseEntity<Any> {
+        val status = request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE) as? Int
+        return when (status) {
+            404 -> ResponseEntity.notFound().build()
+            403 -> ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+            500 -> ResponseEntity.internalServerError().build()
+            else -> ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        }
+    }
+
     // Fetch all users
     @GetMapping("/users/list")
     fun getAllUsers(): ResponseEntity<List<UserRepresentation>> {
-        val token = getAdminAccessToken() // Get the admin access token
-        val headers = createHeaders(token) // Create headers with the token
+        val token = getAdminAccessToken()
+        val headers = createHeaders(token)
+        // Create authentication token
+        headers["Authorization"] = "Bearer $token"
         return keycloakAdminService.getAllUsers(headers)
     }
 
@@ -158,11 +171,11 @@ class KeycloakUserController(
     }
 
     // Update a user
-    @PutMapping("/users/update/{id}")
-    fun updateUser(@PathVariable id: String, @RequestBody UserUpdateDTO: UserUpdateDTO): ResponseEntity<String> {
+    @PutMapping("/users/update")
+    fun updateUser(@RequestBody UserUpdateDTO: UserUpdateDTO): ResponseEntity<out Any> {
         val token = getAdminAccessToken() // Get the admin access token
         val headers = createHeaders(token) // Create headers with the token
-        return keycloakAdminService.updateUser(id, UserUpdateDTO, headers)
+        return keycloakAdminService.updateUser(UserUpdateDTO, headers)
     }
 
     // Delete a user
@@ -175,7 +188,7 @@ class KeycloakUserController(
 
     @GetMapping("/admin")
     // Helper method to fetch admin access token
-    private fun getAdminAccessToken(): String {
+    fun getAdminAccessToken(): String {
         // Prepare form data
         val map: MultiValueMap<String, String> = LinkedMultiValueMap()
         map.add("grant_type", "client_credentials")
@@ -195,7 +208,9 @@ class KeycloakUserController(
             entity,  // Request entity with data and headers
             Map::class.java
         )
-        return (response.body?.get("access_token") as? String)
+        createHeaders(response.body?.get("access_token") as String)
+        headers["Authorization"] = "Bearer $response"
+        return response.body?.get("access_token") as? String
             ?: throw RuntimeException("Failed to fetch access token")
     }
 
@@ -216,7 +231,7 @@ class KeycloakUserController(
         map.add("scope", "openid")
         map.add("username", "parmesh")  // Replace with actual username
         map.add("password", "admin")   // Replace with actual password
-        map.add("client_secret", "Qg0Z29EOtioDLSVVaiQSCW2OYE26Ms9S")  // Replace with actual client_secret
+        map.add("client_secret", "sDoL4iAzeYquc7mtoubGr5t1F8yDRif4")  // Replace with actual client_secret
 
         // Set headers
         val headers = HttpHeaders()
@@ -244,5 +259,19 @@ class KeycloakUserController(
 
         // Verify the token by calling /api/verify-token
         return ResponseEntity.ok(accessToken)
+    }
+
+    @GetMapping("/users/list/client")
+    fun listClient(): List<ClientRepresentation> {
+        val token = getAdminAccessToken()
+        val headers = createHeaders(token)
+        return keycloakAdminService.listClients(headers)
+    }
+
+    @GetMapping("/users/list/client/{id}")
+    fun getClient(@PathVariable id: String): ClientRepresentation? {
+        val token = getAdminAccessToken()
+        val headers = createHeaders(token)
+        return keycloakAdminService.getClientByClientId(headers, id)
     }
 }

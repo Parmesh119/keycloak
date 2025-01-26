@@ -32,7 +32,11 @@ data class UserUpdateDTO(
     val enabled: Boolean? = true,
     val emailVerified: Boolean? = true,
     val requiredActions: List<String>? = null,
+    val serviceAccountClientId: String? = null,
     val credentials: List<CredentialDTO>? = null,
+    val groups: List<String>? = null,
+    val clientRoles: Map<String, List<String>>? = null,
+    val attributes: List<AttributeDTO>? = null,
 )
 
 data class CredentialDTO(

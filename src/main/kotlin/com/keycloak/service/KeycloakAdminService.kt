@@ -100,7 +100,7 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
                 )
 
                 // Get the first group from the response
-                val group = groupResponse.body?.firstOrNull() ?: throw RuntimeException("Group $groupName not found")
+                val group = groupResponse.body?.firstOrNull() ?: createOrGetGroup(groupName)
 
                 // Assign the group to the user with the Bearer token
                 restTemplate.put(
@@ -202,52 +202,170 @@ class KeycloakAdminService(private val restTemplate: RestTemplate) {
     // Update a user
     fun updateUser(userUpdateDTO: UserUpdateDTO, headers: HttpHeaders): ResponseEntity<String> {
 
-        val existingUser = getUser(userUpdateDTO.id, headers)
-        if (existingUser.statusCode != HttpStatus.OK) {
-            return ResponseEntity.status(existingUser.statusCode).body("User not found")
-        }
-        // Check if the user exists
-        val user = UserRepresentation().apply {
-            username = userUpdateDTO.username
-            email = userUpdateDTO.email
-            firstName = userUpdateDTO.firstName
-            lastName = userUpdateDTO.lastName
-            isEnabled = userUpdateDTO.enabled
-            isEmailVerified = userUpdateDTO.emailVerified
-
-            // If required actions are provided, add them
-            if (userUpdateDTO.requiredActions != null) {
-                requiredActions = userUpdateDTO.requiredActions
+        try {
+            val existingUser = getUser(userUpdateDTO.id, headers)
+            if (existingUser.statusCode != HttpStatus.OK) {
+                return ResponseEntity.status(existingUser.statusCode).body("User not found")
             }
 
-            // If credentials are provided, map them
-            if (userUpdateDTO.credentials != null) {
-                credentials = userUpdateDTO.credentials.map { cred ->
-                    CredentialRepresentation().apply {
-                        type = cred.type
-                        value = cred.value
-                        isTemporary = cred.temporary
+            val user = UserRepresentation().apply {
+                username = userUpdateDTO.username
+                email = userUpdateDTO.email
+                firstName = userUpdateDTO.firstName
+                lastName = userUpdateDTO.lastName
+                isEnabled = userUpdateDTO.enabled
+                isEmailVerified = userUpdateDTO.emailVerified
+
+                if (userUpdateDTO.requiredActions != null) {
+                    requiredActions = userUpdateDTO.requiredActions
+                }
+
+                if (userUpdateDTO.credentials != null) {
+                    credentials = userUpdateDTO.credentials.map { cred ->
+                        CredentialRepresentation().apply {
+                            type = cred.type
+                            value = cred.value
+                            isTemporary = cred.temporary
+                        }
+                    }
+                }
+
+                if (userUpdateDTO.attributes != null) {
+                    for (attribute in userUpdateDTO.attributes) {
+                        val requiredRoles = attribute.required?.roles
+                        if (requiredRoles != null && requiredRoles.isNotEmpty()) {
+                            println("Required roles: $requiredRoles")
+                        }
                     }
                 }
             }
-        }
 
-        val id = userUpdateDTO.id
-        val request = org.springframework.http.HttpEntity(user, headers)
-        val response = restTemplate.exchange(
-            "$adminBaseUrl/users/$id",
-            org.springframework.http.HttpMethod.PUT,
-            request,
-            String::class.java
-        )
+            val id = userUpdateDTO.id
+            val request = org.springframework.http.HttpEntity(user, headers)
+            val response = restTemplate.exchange(
+                "$adminBaseUrl/users/$id",
+                org.springframework.http.HttpMethod.PUT,
+                request,
+                String::class.java
+            )
 
-        return if (response.statusCode.is2xxSuccessful) {
-            ResponseEntity.ok("User updated successfully")
-        } else {
-            ResponseEntity.status(response.statusCode).body("Failed to update user")
+            val clientid = getClientByClientId(headers, userUpdateDTO.serviceAccountClientId ?: "config")?.id
+                ?: throw RuntimeException("Client not found")
+
+            userUpdateDTO.clientRoles?.forEach { (_, roles) ->
+                // Get existing client roles for the user
+                val existingRoleMappings = restTemplate.exchange(
+                    "$adminBaseUrl/users/$id/role-mappings/clients/$clientid",
+                    HttpMethod.GET,
+                    HttpEntity<Void>(headers),
+                    Array<RoleRepresentation>::class.java
+                )
+
+                // Filter out roles to remove
+                val rolesToRemove = existingRoleMappings.body
+                    ?.filter { existingRole ->
+                        existingRole.name !in roles
+                    } ?: emptyList()
+
+                // Remove existing roles not in the new role set
+                if (rolesToRemove.isNotEmpty()) {
+                    val removeRoleRequest = HttpEntity(rolesToRemove, headers)
+                    restTemplate.exchange(
+                        "$adminBaseUrl/users/$id/role-mappings/clients/$clientid",
+                        HttpMethod.DELETE,
+                        removeRoleRequest,
+                        Void::class.java
+                    )
+                }
+
+                // Add new roles
+                val roleMappings = roles.map { roleName ->
+                    val roleResponse = restTemplate.exchange(
+                        "$adminBaseUrl/clients/$clientid/roles/$roleName",
+                        HttpMethod.GET,
+                        HttpEntity<Void>(headers),
+                        RoleRepresentation::class.java
+                    )
+                    roleResponse.body ?: throw RuntimeException("Role $roleName not found")
+                }
+
+                // Add new roles
+                val roleRequest = HttpEntity(roleMappings, headers)
+                restTemplate.postForEntity(
+                    "$adminBaseUrl/users/$id/role-mappings/clients/$clientid",
+                    roleRequest,
+                    String::class.java
+                )
+            }
+
+            userUpdateDTO.groups?.forEach { groupName ->
+                val groupResponse = restTemplate.exchange(
+                    "$adminBaseUrl/groups?search=$groupName",
+                    HttpMethod.GET,
+                    HttpEntity<Void>(headers),
+                    Array<GroupRepresentation>::class.java
+                )
+
+                val group = groupResponse.body?.firstOrNull() ?: createOrGetGroup(groupName)
+
+                restTemplate.put(
+                    "$adminBaseUrl/users/$id/groups/${group.id}",
+                    HttpEntity(null, headers)
+                )
+            }
+
+            return if (response.statusCode.is2xxSuccessful) {
+                ResponseEntity.ok("User updated successfully")
+            } else {
+                ResponseEntity.status(response.statusCode).body("Failed to update user")
+            }
+        } catch (e: Exception) {
+            throw e
         }
     }
 
+    fun createOrGetGroup(groupName: String): GroupRepresentation {
+        val admin_token = getAdminAccessToken()
+        val headers = HttpHeaders().apply {
+            setBearerAuth(admin_token)
+            contentType = MediaType.APPLICATION_JSON
+        }
+
+        // First, try to find the group
+        val existingGroupResponse = restTemplate.exchange(
+            "$adminBaseUrl/groups?search=$groupName",
+            HttpMethod.GET,
+            HttpEntity<Void>(headers),
+            Array<GroupRepresentation>::class.java
+        )
+
+        // If group exists, return the first match
+        existingGroupResponse.body?.firstOrNull()?.let { return it }
+
+        // If group doesn't exist, create a new group
+        val newGroup = GroupRepresentation().apply {
+            name = groupName
+            path = "/$groupName"
+        }
+
+        val createGroupRequest = HttpEntity(newGroup, headers)
+        restTemplate.postForEntity(
+            "$adminBaseUrl/groups",
+            createGroupRequest,
+            Void::class.java
+        )
+
+        // Fetch and return the newly created group
+        val createdGroupResponse = restTemplate.exchange(
+            "$adminBaseUrl/groups?search=$groupName",
+            HttpMethod.GET,
+            HttpEntity<Void>(headers),
+            Array<GroupRepresentation>::class.java
+        )
+
+        return createdGroupResponse.body?.firstOrNull()
+            ?: throw RuntimeException("Failed to create or retrieve group: $groupName")
+    }
     // Delete a user
     fun deleteUser(id: String, headers: HttpHeaders): ResponseEntity<String> {
         val request = org.springframework.http.HttpEntity(null, headers)

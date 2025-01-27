@@ -16,9 +16,7 @@ raw = '''
   "enabled": true,
   "emailVerified":true,
   "requiredActions":[
-    "VERIFY_EMAIL",
     "UPDATE_PASSWORD",
-    "UPDATE_PROFILE"
   ],
   "clientRoles": {
     "config":["ADMIN"]

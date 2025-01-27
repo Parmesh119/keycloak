@@ -2,7 +2,10 @@ package com.keycloak.service
 
 import com.keycloak.model.UserDTO
 import com.keycloak.model.UserUpdateDTO
+import org.keycloak.admin.client.Keycloak
 import org.keycloak.representations.idm.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.*
 import org.springframework.stereotype.Service
@@ -10,11 +13,143 @@ import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
 import org.springframework.web.client.RestTemplate
 
+
 @Service
-class KeycloakAdminService(private val restTemplate: RestTemplate) {
+class KeycloakAdminService(private val restTemplate: RestTemplate, @Autowired private val keycloak: Keycloak) {
 
     private val realm = "master"
     private val adminBaseUrl = "http://localhost:8080/admin/realms/master"
+
+    @Value("\${keycloak.auth-server-url}")
+    private val authServerUrl: String? = null
+
+    @Value("\${keycloak.resource}")
+    private val clientId: String? = null
+
+    @Value("\${keycloak.credentials.secret}")
+    private val clientSecret: String? = null
+
+    fun login(username: String?, password: String?): MutableMap<String, Any?> {
+        val restTemplate = RestTemplate()
+        val tokenUrl = "$authServerUrl/realms/$realm/protocol/openid-connect/token"
+
+        val token = getAdminAccessToken()
+        val headers = HttpHeaders()
+        headers["Authorization"] = "Bearer $token"
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+        val body = "grant_type=password" +
+                "&client_id=" + clientId +
+                "&client_secret=" + clientSecret +
+                "&username=" + username +
+                "&password=" + password
+
+        val entity = HttpEntity(body, headers)
+
+        val response: ResponseEntity<MutableMap<String, Any>> = restTemplate.exchange(
+            tokenUrl,
+            HttpMethod.POST,
+            entity,
+            object : ParameterizedTypeReference<MutableMap<String, Any>>() {}
+        )
+
+
+        val tokenResponse: MutableMap<String, Any?> = HashMap()
+        tokenResponse["access_token"] = response.body!!["access_token"]
+        tokenResponse["expires_in"] = response.body!!["expires_in"]
+        tokenResponse["refresh_token"] = response.body!!["refresh_token"]
+        tokenResponse["refresh_expires_in"] = response.body!!["refresh_expires_in"]
+        tokenResponse["id_token"] = response.body!!["id_token"]
+
+        return tokenResponse
+    }
+
+    fun logout(accessToken: String?): String {
+        val logoutUrl = "$authServerUrl/realms/$realm/protocol/openid-connect/logout"
+
+        val headers = HttpHeaders()
+        headers["Authorization"] = "Bearer $accessToken"
+
+        val entity = HttpEntity<String>(headers)
+
+        val response = restTemplate.exchange(
+            logoutUrl,
+            HttpMethod.POST,
+            entity,
+            String::class.java
+        )
+
+        return "Logged out successfully"
+    }
+
+    fun refreshAccessToken(refreshToken: String?): MutableMap<String, Any?> {
+        val refreshUrl = "$authServerUrl/realms/$realm/protocol/openid-connect/token"
+
+        val headers = HttpHeaders()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+        val body = "grant_type=refresh_token" +
+                "&client_id=" + clientId +
+                "&client_secret=" + clientSecret +
+                "&refresh_token=" + refreshToken
+
+        val entity = HttpEntity(body, headers)
+
+        val response: ResponseEntity<Map<String, Any>> = restTemplate.exchange(
+            refreshUrl,
+            HttpMethod.POST,
+            entity,
+            object : ParameterizedTypeReference<Map<String, Any>>() {}
+        )
+
+        val tokenResponse: MutableMap<String, Any?> = HashMap()
+        tokenResponse["access_token"] = response.body?.get("access_token")
+        tokenResponse["expires_in"] = response.body?.get("expires_in")
+        tokenResponse["refresh_token"] = response.body?.get("refresh_token")
+        tokenResponse["refresh_expires_in"] = response.body?.get("refresh_expires_in")
+        tokenResponse["id_token"] = response.body?.get("id_token")
+
+        return tokenResponse
+    }
+
+    fun resetPassword(userId: String, newPassword: String): String {
+        try {
+            val accessToken = getAdminAccessToken()
+            val resetPasswordUrl = "$authServerUrl/admin/realms/$realm/users/$userId/reset-password"
+
+        val headers = HttpHeaders().apply {
+            contentType = MediaType.APPLICATION_JSON
+            setBearerAuth(accessToken)
+        }
+
+        val body = mapOf(
+            "type" to "password",
+            "value" to newPassword,
+            "temporary" to false
+        )
+
+        val entity = HttpEntity(body, headers)
+
+        restTemplate.exchange(
+            resetPasswordUrl,
+            HttpMethod.PUT,
+            entity,
+            Void::class.java
+        )
+
+        return "Password reset successfully"
+
+        } catch (e: Exception) {
+            return "Failed to reset password: ${e.message}"
+        }
+    }
+
+    fun findUserByUsername(username: String): String? {
+        val users = keycloak.realm("master")
+            .users()
+            .search(username, true)
+        return users.map { it -> it.id }.firstOrNull()
+    }
 
     // Create a user
     fun createUser(userDTO: UserDTO, headers: HttpHeaders): ResponseEntity<out Any> {

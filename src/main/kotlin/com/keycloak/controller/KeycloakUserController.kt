@@ -1,8 +1,6 @@
 package com.keycloak.controller
 
 import com.keycloak.model.UserDTO
-import com.keycloak.model.UserInfo
-import com.keycloak.model.UserInfoWithTokens
 import com.keycloak.model.UserUpdateDTO
 import com.keycloak.service.EmailService
 import com.keycloak.service.KeycloakAdminService
@@ -12,23 +10,17 @@ import jakarta.servlet.http.HttpServletResponse
 import org.keycloak.representations.idm.ClientRepresentation
 import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.http.*
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken
-import org.springframework.security.oauth2.core.oidc.user.OidcUser
-import org.springframework.web.bind.annotation.*
-import org.springframework.web.client.RestTemplate
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
+import org.springframework.web.bind.annotation.*
+import org.springframework.web.client.RestTemplate
 
 
 @RestController
 @RequestMapping("/api")
 class KeycloakUserController(
-    private val clientService: OAuth2AuthorizedClientService,
     private val restTemplate: RestTemplate,
     private val keycloakAdminService: KeycloakAdminService,
     private val emailService: EmailService
@@ -45,51 +37,71 @@ class KeycloakUserController(
         return "This is a public route. No authentication required."
     }
 
-    @GetMapping("/login")
-    fun getPrivateRoute(response: HttpServletResponse): ResponseEntity<Any> {
-        var accessToken: String? = null
-        var refreshToken: String? = null
-        val authentication = SecurityContextHolder.getContext().authentication
+    @PostMapping("/login")
+    fun login(@RequestBody loginRequest: Map<String?, String?>): ResponseEntity<MutableMap<String, Any?>> {
+        val username = loginRequest["username"]
+        val password = loginRequest["password"]
 
-        return if (authentication != null && authentication.isAuthenticated) {
-            val oidcUser = authentication.principal as? OidcUser
+        val tokens: MutableMap<String, Any?> = keycloakAdminService.login(username, password)
+        return ResponseEntity.ok<MutableMap<String, Any?>>(tokens)
+    }
 
-            // Get the JWT Access Token
-            val jwtToken = when (authentication) {
-                is OAuth2AuthenticationToken -> {
-                    val authorizedClient = clientService.loadAuthorizedClient<OAuth2AuthorizedClient>(
-                        authentication.authorizedClientRegistrationId,
-                        authentication.name
-                    )
-                    accessToken = authorizedClient?.accessToken?.tokenValue
-                    refreshToken = authorizedClient?.refreshToken?.tokenValue
-                }
-                else -> null
-            }
+    @PostMapping("/logout")
+    fun logout(@RequestHeader("Authorization") accessToken: String): ResponseEntity<String> {
+        val message = keycloakAdminService.logout(accessToken.replace("Bearer ", ""))
+        return ResponseEntity.ok(message)
+    }
 
-            // Get the ID Token
-            val idToken = oidcUser?.idToken?.tokenValue
+    @PostMapping("/refresh-token")
+    fun refreshToken(@RequestBody refreshTokenRequest: Map<String, String>): ResponseEntity<MutableMap<String, Any?>> {
+        val refreshToken = refreshTokenRequest["refresh_token"]
+        val newTokens = keycloakAdminService.refreshAccessToken(refreshToken)
+        return ResponseEntity.ok(newTokens)
+    }
 
-            val userInfoWithTokens = UserInfoWithTokens(
-                userInfo = UserInfo(
-                    name = oidcUser?.fullName ?: authentication.name,
-                    email = oidcUser?.email ?: "",
-                    roles = authentication.authorities.map { it.authority },
-                    claims = oidcUser?.claims?.filterKeys {
-                        it in setOf("given_name", "family_name", "email_verified", "preferred_username")
-                    } ?: emptyMap()
-                ),
-                accessToken = accessToken,
-                refreshToken = refreshToken,
-                idToken = idToken
-            )
-            println("Access Token " + accessToken)
-            println("Refresh Token " + refreshToken)
-            println("ID Token " + idToken)
-            return ResponseEntity.ok(userInfoWithTokens)
-        } else {
-            ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+    data class ResetPasswordRequest(
+        val username: String,
+        val type: String? = "password",
+        val temporary: Boolean? = false,
+        val newPassword: String,
+        val confirmNewPassword: String
+    )
+    @PutMapping("/reset/password", consumes = [MediaType.APPLICATION_JSON_VALUE], produces = [MediaType.APPLICATION_JSON_VALUE])
+    fun resetPassword(
+        @RequestBody resetPasswordRequest: ResetPasswordRequest,
+    ): ResponseEntity<String> {
+
+        val username = resetPasswordRequest.username
+        val newPassword = resetPasswordRequest.newPassword
+        val confirmNewPassword = resetPasswordRequest.confirmNewPassword
+
+        // Check if passwords match
+        if (newPassword != confirmNewPassword) {
+            return ResponseEntity.badRequest().body("Passwords do not match")
         }
+
+        if (username.isNullOrBlank() || newPassword.isNullOrBlank()) {
+            return ResponseEntity.badRequest().body("Username or password is missing")
+        }
+
+        // Get user ID by username
+        return try {
+            val userId = keycloakAdminService.findUserByUsername(username)
+            val resetMessage = keycloakAdminService.resetPassword(userId.toString(), newPassword)
+            ResponseEntity.ok(resetMessage)
+        } catch (ex: Exception) {
+            println("Error resetting password: ${ex.message}")
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ex.message)
+        }
+    }
+
+    data class Username (
+        val username: String
+    )
+    @GetMapping("/users")
+    fun getUserInfo(@RequestBody username: Username): ResponseEntity<String> {
+        val user = keycloakAdminService.findUserByUsername(username.username)
+        return ResponseEntity.ok(user ?: "User not found")
     }
 
     @GetMapping("/logout")
